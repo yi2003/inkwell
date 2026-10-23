@@ -24,6 +24,9 @@ Write Markdown on the left and see it laid out as a page on the right, then expo
 
 ## Tests
     npm i playwright && node tests/e2e.mjs   # needs the server on :8765, and Chrome at /usr/bin/google-chrome
+    node tests/acceptance.mjs                # acceptance suite A–E only (starts its own server); needs poppler-utils + Pillow
+
+Results go to [tests/REPORT.md](tests/REPORT.md). Every page of the exam fixture is shown in examples/exam-full-pages.png.
 
 ## Licenses
 The vendored libraries are MIT or BSD licensed. See `vendor/LICENSE-*`.

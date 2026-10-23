@@ -65,6 +65,13 @@
   function protectMath(src) {
     const store = [];
     const put = (tex, display) => { store.push({ tex: tex.trim(), display }); return PH_OPEN + (store.length - 1) + PH_CLOSE; };
+    // Multi-line math inside "> " quotes or indented list items: drop the per-line quote markers.
+    const unquote = (tex, whole, offset) => {
+      if (!tex.includes('\n')) return tex;
+      const lineStart = whole.lastIndexOf('\n', offset - 1) + 1;
+      const prefix = /^[ \t]*(?:>[ \t]?)+/.exec(whole.slice(lineStart, offset));
+      return prefix ? tex.replace(/\n[ \t]*(?:>[ \t]?)+/g, '\n') : tex;
+    };
     const out = [];
     // Walk line by line so fenced code blocks are left untouched.
     const parts = src.split(/(^ {0,3}(?:```|~~~)[^\n]*\n[\s\S]*?(?:^ {0,3}(?:```|~~~)[ \t]*$|(?![\s\S])))/m);
@@ -76,8 +83,8 @@
       for (let j = 0; j < segs.length; j++) {
         if (j % 3 === 1) { text += segs[j] + segs[j + 1] + segs[j]; j++; continue; }
         text += segs[j]
-          .replace(/(?<!\\)\\\[([\s\S]+?)\\\]/g, (_, t) => put(t, true))
-          .replace(/(?<!\\)\$\$([\s\S]+?)\$\$/g, (_, t) => put(t, true))
+          .replace(/(?<!\\)\\\[([\s\S]+?)\\\]/g, (_, t, o, w) => put(unquote(t, w, o), true))
+          .replace(/(?<!\\)\$\$([\s\S]+?)\$\$/g, (_, t, o, w) => put(unquote(t, w, o), true))
           .replace(/(?<!\\)\\\(([\s\S]+?)\\\)/g, (_, t) => put(t, false))
           .replace(/(?<![\\$\w])\$(?![\s$\d])((?:\\.|[^\\$\n])+?)(?<!\s)\$(?![\d$])/g, (_, t) => put(t, false));
       }
@@ -285,7 +292,7 @@
         image: { type: 'jpeg', quality: 0.95 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: getComputedStyle(clone).backgroundColor || '#fff', logging: false },
         jsPDF: { unit: 'mm', format: [w, h].sort((a, b) => a - b), orientation: opts.orient },
-        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'pre', 'blockquote', 'figure', '.math-block', 'img', 'h1', 'h2', 'h3', 'h4'] },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['p', 'li', 'tr', 'pre', 'blockquote', 'figure', '.math-block', '.katex', 'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', '.mermaid-fig', '.img-fallback'] },
       }).from(clone).toPdf();
       const pdf = await worker.get('pdf');
       if (opts.pagenum) {

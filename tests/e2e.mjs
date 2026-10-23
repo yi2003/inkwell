@@ -89,3 +89,6 @@ console.log('upload OK, filename now', await page.inputValue('#opt-filename'));
 console.log('external requests', reqs.length, reqs.slice(0,5));
 console.log('errors', errors);
 await browser.close();
+
+// Full acceptance suite (A–E) → tests/REPORT.md. Skip with SKIP_ACCEPTANCE=1.
+if (!process.env.SKIP_ACCEPTANCE) await import('./acceptance.mjs');
