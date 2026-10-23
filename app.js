@@ -57,26 +57,45 @@
     hourglass: '⌛', coffee: '☕', pushpin: '📌', link: '🔗', information_source: 'ℹ️', no_entry: '⛔', construction: '🚧',
     100: '💯', clap: '👏', pray: '🙏', thinking: '🤔', sob: '😭', ok_hand: '👌', wave: '👋', muscle: '💪', cn: '🇨🇳', us: '🇺🇸',
   };
-  const mathBlock = {
-    name: 'mathBlock', level: 'block',
-    start: (src) => src.match(/^\s*\$\$/m)?.index,
-    tokenizer(src) {
-      const m = /^ {0,3}\$\$([\s\S]+?)\$\$ *(?:\n+|$)/.exec(src);
-      if (m) return { type: 'mathBlock', raw: m[0], text: m[1].trim() };
-    },
-    renderer: (t) => `<div class="math-block" data-tex="${esc(t.text)}"></div>\n`,
-  };
-  const mathInline = {
-    name: 'mathInline', level: 'inline',
-    start: (src) => src.indexOf('$') < 0 ? undefined : src.indexOf('$'),
-    tokenizer(src) {
-      let m = /^\$\$([^\n]+?)\$\$/.exec(src);
-      if (m) return { type: 'mathInline', raw: m[0], text: m[1], display: true };
-      m = /^\$(?!\s)((?:\\.|[^\\$\n])+?)(?<!\s)\$(?!\d)/.exec(src);
-      if (m) return { type: 'mathInline', raw: m[0], text: m[1], display: false };
-    },
-    renderer: (t) => `<span class="${t.display ? 'math-block' : 'math-inline'}" data-tex="${esc(t.text)}"></span>`,
-  };
+  /* Math is pulled out of the source BEFORE marked runs, replaced by private-use placeholders,
+     so marked never sees (and never "un-escapes") the backslashes, _ * ^ | inside formulas.
+     Supported: \[ … \]  $$ … $$  (display, may span lines)  and  \( … \)  $ … $  (inline). */
+  const PH_OPEN = '\uE000', PH_CLOSE = '\uE001';
+  const IMG_EXT = /\.(?:jpe?g|png|gif|webp|svg|avif|bmp)(?:\?[^\s]*)?$/i;
+  function protectMath(src) {
+    const store = [];
+    const put = (tex, display) => { store.push({ tex: tex.trim(), display }); return PH_OPEN + (store.length - 1) + PH_CLOSE; };
+    const out = [];
+    // Walk line by line so fenced code blocks are left untouched.
+    const parts = src.split(/(^ {0,3}(?:```|~~~)[^\n]*\n[\s\S]*?(?:^ {0,3}(?:```|~~~)[ \t]*$|(?![\s\S])))/m);
+    parts.forEach((chunk, i) => {
+      if (i % 2 === 1) { out.push(chunk); return; } // fenced code
+      // keep inline code spans intact
+      const segs = chunk.split(/((?<!`)`+)([\s\S]*?[^`])\1(?!`)/);
+      let text = '';
+      for (let j = 0; j < segs.length; j++) {
+        if (j % 3 === 1) { text += segs[j] + segs[j + 1] + segs[j]; j++; continue; }
+        text += segs[j]
+          .replace(/(?<!\\)\\\[([\s\S]+?)\\\]/g, (_, t) => put(t, true))
+          .replace(/(?<!\\)\$\$([\s\S]+?)\$\$/g, (_, t) => put(t, true))
+          .replace(/(?<!\\)\\\(([\s\S]+?)\\\)/g, (_, t) => put(t, false))
+          .replace(/(?<![\\$\w])\$(?![\s$\d])((?:\\.|[^\\$\n])+?)(?<!\s)\$(?![\d$])/g, (_, t) => put(t, false));
+      }
+      // Bare image URL alone on a line (optionally inside "> " quotes) → linked image.
+      text = text.replace(/^((?:[ \t]*>)*[ \t]*)(https?:\/\/[^\s<>()]+?)([ \t]*)$/gm, (m, pre, url, tail) =>
+        IMG_EXT.test(url) ? `${pre}[![image](${url})](${url})` : m);
+      out.push(text);
+    });
+    return { text: out.join(''), store };
+  }
+  function restoreMath(html, store) {
+    return html.replace(/\uE000(\d+)\uE001/g, (m, n) => {
+      const item = store[+n]; if (!item) return m;
+      return item.display
+        ? `<span class="math-block" data-tex="${esc(item.tex)}"></span>`
+        : `<span class="math-inline" data-tex="${esc(item.tex)}"></span>`;
+    });
+  }
   const emoji = {
     name: 'emoji', level: 'inline',
     start: (src) => { const i = src.search(/:[a-z0-9_+-]+:/); return i < 0 ? undefined : i; },
@@ -106,8 +125,20 @@
         try { return l ? hljs.highlight(code, { language: l }).value : hljs.highlightAuto(code).value; } catch { return esc(code); }
       },
     }),
-    { gfm: true, breaks: false, extensions: [mathBlock, mathInline, emoji, pageBreak] },
+    { gfm: true, breaks: false, extensions: [emoji, pageBreak] },
   );
+
+  // Keep the author's own numbers: marked merges "7." "15." "21." separated by blank lines into
+  // one list and renumbers them 7, 8, 9…; an explicit value attribute pins each item's number.
+  md.use({
+    renderer: {
+      listitem(item) {
+        const html = marked.Renderer.prototype.listitem.call(this, item);
+        const n = /^ {0,3}(\d{1,9})[.)]/.exec(item.raw || '');
+        return n ? html.replace(/^<li/, `<li value="${+n[1]}"`) : html;
+      },
+    },
+  });
 
   mermaid.initialize({
     startOnLoad: false, securityLevel: 'strict', theme: 'neutral',
@@ -120,7 +151,8 @@
   async function render() {
     const seq = ++renderSeq;
     const src = editor.value;
-    const raw = md.parse(src);
+    const prot = protectMath(src);
+    const raw = restoreMath(md.parse(prot.text), prot.store);
     const clean = DOMPurify.sanitize(raw, { ADD_ATTR: ['target'], FORBID_TAGS: ['style', 'form'] });
     const tmp = document.createElement('div');
     tmp.innerHTML = clean;
@@ -245,6 +277,8 @@
     document.body.appendChild(holder);
     try {
       await document.fonts.ready;
+      const blocked = await prepareImages(clone);
+      if (blocked) toast(`${blocked} image(s) block cross-site export — shown as links. Use Print to include them.`);
       const worker = html2pdf().set({
         margin: m,
         filename: fname('.pdf'),
@@ -263,6 +297,36 @@
       }
       return pdf;
     } finally { holder.remove(); }
+  }
+
+  // html2canvas can only draw cross-origin images served with CORS headers. Probe each image with
+  // crossOrigin=anonymous; if it can't be read, swap in a labelled placeholder instead of failing.
+  async function prepareImages(root) {
+    let blocked = 0;
+    await Promise.all([...root.querySelectorAll('img')].map((img) => new Promise((resolve) => {
+      const src = img.getAttribute('src') || '';
+      if (/^(data:|blob:)/.test(src) || new URL(src, location.href).origin === location.origin) return resolve();
+      const probe = new Image();
+      probe.crossOrigin = 'anonymous';
+      let fired = false;
+      const done = (ok) => {
+        if (fired) return; fired = true;
+        if (ok) { try { const c = document.createElement('canvas'); c.width = c.height = 1; c.getContext('2d').drawImage(probe, 0, 0); c.toDataURL(); } catch { ok = false; } }
+        if (ok) { img.crossOrigin = 'anonymous'; img.src = probe.src; }
+        else {
+          blocked++;
+          const ph = document.createElement('div');
+          ph.className = 'img-fallback';
+          ph.textContent = '🖼 Image: ' + src;
+          img.replaceWith(ph);
+        }
+        resolve();
+      };
+      probe.onload = () => done(true); probe.onerror = () => done(false);
+      setTimeout(() => done(false), 8000);
+      probe.src = src;
+    })));
+    return blocked;
   }
   const pdfBtn = $('#btn-pdf');
   pdfBtn.onclick = async () => {

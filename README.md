@@ -9,7 +9,10 @@ Write Markdown on the left and see it laid out as a page on the right, then expo
 ## Features
 - Live split editor/preview. On phones it switches to Write/Preview tabs and the page scales to fit.
 - GFM: tables with alignment, task lists, strikethrough, autolinks, raw HTML (sanitized with DOMPurify)
-- Syntax highlighting (highlight.js), KaTeX math (`$…$`, `$$…$$`), Mermaid diagrams (```mermaid)
+- Syntax highlighting (highlight.js), Mermaid diagrams (```mermaid)
+- KaTeX math: inline `$…$` / `\(…\)`, display `$$…$$` / `\[…\]` (multi-line OK). Math is protected before Markdown parsing, so `\`, `_`, `*`, `^`, `|` inside formulas are safe
+- Bare image URLs on their own line (`.jpg/.png/.gif/.webp…`, also inside `>` quotes) become linked images
+- Ordered lists keep the author's numbers (`7.` `15.` `21.` stay 7, 15, 21)
 - Emoji shortcodes (`:rocket:`) and pasted emoji. CJK text uses PingFang / YaHei / Noto CJK fallbacks.
 - Page breaks: `\newpage`, `\pagebreak` or `<div class="page-break"></div>`
 - Open a .md file or drag and drop one. Autosave to localStorage. Ctrl/Cmd+S saves.

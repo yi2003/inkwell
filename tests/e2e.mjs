@@ -7,7 +7,7 @@ const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push('pageerror: ' + e.message));
 page.on('console', m => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
-const reqs = []; page.on('request', r => { if (!r.url().startsWith('http://localhost:8765')) reqs.push(r.url()); });
+const reqs = []; page.on('request', r => { if (!r.url().startsWith('http://localhost:8765')) reqs.push(r.url()); }); // sample doc only
 await page.goto('http://localhost:8765/', { waitUntil: 'networkidle' });
 await page.waitForSelector('#doc .mermaid-fig svg', { timeout: 20000 });
 const checks = await page.evaluate(() => ({
@@ -52,6 +52,40 @@ const f = out + '/up.md'; fs.writeFileSync(f, '# Uploaded 上传测试\n\nhello'
 await page.setInputFiles('#file-input', f);
 await page.waitForFunction(() => document.querySelector('#doc h1')?.textContent.includes('上传测试'));
 console.log('upload OK, filename now', await page.inputValue('#opt-filename'));
+
+// ---- exam fixture: \( \) / \[ \] math, numbering, bare image URLs, fullwidth spaces ----
+{
+  const exam = fs.readFileSync(new URL('./fixtures/exam-1023.md', import.meta.url), 'utf8');
+  const ep = await ctx.newPage();
+  await ep.goto('http://localhost:8765/');
+  await ep.fill('#editor', exam);
+  await ep.waitForFunction(() => document.querySelector('#doc').textContent.includes('Q27'));
+  await ep.waitForFunction(() => [...document.querySelectorAll('#doc img')].every(i => i.complete));
+  const r = await ep.evaluate(() => {
+    const d = document.querySelector('#doc');
+    return {
+      raw: (d.innerText.match(/\\\(|\\\[|\\\)|\\\]/g) || []).length,
+      katex: d.querySelectorAll('.katex').length,
+      display: d.querySelectorAll('.katex-display').length,
+      errors: d.querySelectorAll('.katex-error').length,
+      numbers: [...d.querySelectorAll('ol > li')].map(li => li.value).join(','),
+      imgs: [...d.querySelectorAll('blockquote a > img')].filter(i => i.naturalWidth > 0).length,
+      fullwidth: (d.textContent.match(/\u3000/g) || []).length,
+      blanks: d.querySelectorAll('.underline-line').length,
+      optionList: [...d.querySelectorAll('ol[type], ol li')].some(li => /^[A-D]\./.test(li.textContent)),
+    };
+  });
+  const expInline = (exam.match(/\\\(/g) || []).length, expDisplay = (exam.match(/\\\[/g) || []).length;
+  const ok = r.raw === 0 && r.katex === expInline + expDisplay && r.display === expDisplay && r.errors === 0
+    && r.numbers === '1,2,4,6,7,15,21,22,26' && r.imgs === 3 && r.fullwidth === (exam.match(/\u3000/g) || []).length
+    && r.blanks === 3 && !r.optionList;
+  console.log('exam fixture', ok ? 'PASS' : 'FAIL', JSON.stringify(r));
+  if (!ok) process.exitCode = 1;
+  const pages = await ep.evaluate(async () => (await window.inkwell.buildPdf()).internal.getNumberOfPages());
+  console.log('exam one-click PDF pages', pages);
+  await ep.emulateMedia({ media: 'print' });
+  await ep.pdf({ path: out + '/exam-print.pdf', preferCSSPageSize: true, printBackground: true });
+}
 console.log('external requests', reqs.length, reqs.slice(0,5));
 console.log('errors', errors);
 await browser.close();
