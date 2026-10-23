@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkwell — Markdown to PDF</title>
+<meta name="description" content="Write Markdown, preview it as paper, export a PDF. Math, diagrams, code highlighting and CJK text. Runs fully in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230f766e'/><path d='M9 23V9h3l4 6 4-6h3v14h-3v-9l-4 6-4-6v9z' fill='white'/></svg>">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="vendor/hljs/github.min.css" id="hljs-theme">
+<link rel="stylesheet" href="app.css">
+<style id="page-rule"></style>
+</head>
+<body>
+<header class="topbar no-print">
+  <div class="brand"><span class="logo">M</span><span>Inkwell</span><small>Markdown → PDF</small></div>
+  <div class="actions">
+    <label class="btn" title="Open a .md file">
+      <input type="file" id="file-input" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 3v12m0-12 4 4m-4-4L8 7M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span>Open</span>
+    </label>
+    <button class="btn" id="btn-sample" title="Load the sample document"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z M14 4v5h5"/></svg><span>Sample</span></button>
+    <button class="btn" id="btn-clear" title="Clear the editor"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13"/></svg><span>Clear</span></button>
+    <button class="btn" id="btn-settings" aria-expanded="false" title="Page settings"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><span>Page</span></button>
+    <button class="btn" id="btn-html" title="Download as standalone HTML"><svg viewBox="0 0 24 24"><path d="m8 8-4 4 4 4m8-8 4 4-4 4"/></svg><span>HTML</span></button>
+    <button class="btn" id="btn-print" title="Print / Save as PDF via the browser (selectable text, smallest file)"><svg viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/></svg><span>Print</span></button>
+    <button class="btn primary" id="btn-pdf" title="Download a PDF file in one click"><svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg><span>Download PDF</span></button>
+  </div>
+</header>
+
+<section class="settings no-print" id="settings" hidden>
+  <label>File name <input id="opt-filename" type="text" value="document" spellcheck="false"><span class="suffix">.pdf</span></label>
+  <label>Page size
+    <select id="opt-size"><option value="A4">A4</option><option value="Letter">Letter</option><option value="Legal">Legal</option><option value="A5">A5</option></select>
+  </label>
+  <label>Orientation
+    <select id="opt-orient"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+  </label>
+  <label>Margins (mm) <input id="opt-margin" type="number" min="0" max="50" step="1" value="18"></label>
+  <label>Style
+    <select id="opt-theme"><option value="clean">Clean (sans)</option><option value="academic">Academic (serif)</option><option value="report">Report (teal accents)</option><option value="paper">Warm paper</option></select>
+  </label>
+  <label>Font size
+    <select id="opt-font"><option value="10">10 pt</option><option value="11" selected>11 pt</option><option value="12">12 pt</option><option value="13">13 pt</option></select>
+  </label>
+  <label class="check"><input id="opt-pagenum" type="checkbox" checked> Page numbers (Download PDF)</label>
+  <p class="hint">“Download PDF” makes a file in one click (pages are images, text not selectable). “Print” uses the browser’s Save-as-PDF: selectable/searchable text and a smaller file.</p>
+</section>
+
+<div class="tabs no-print" role="tablist">
+  <button role="tab" id="tab-edit" aria-selected="true">Write</button>
+  <button role="tab" id="tab-preview" aria-selected="false">Preview</button>
+</div>
+
+<main class="workspace" id="workspace" data-view="edit">
+  <section class="pane editor-pane no-print">
+    <div class="pane-head"><span>Markdown</span><span id="stats" class="muted"></span></div>
+    <textarea id="editor" spellcheck="false" autocomplete="off" placeholder="Type or paste Markdown here, or drop a .md file…"></textarea>
+  </section>
+  <section class="pane preview-pane">
+    <div class="pane-head no-print"><span>Preview</span><span id="page-label" class="muted"></span></div>
+    <div class="preview-scroll" id="preview-scroll">
+      <article class="doc theme-clean" id="doc"></article>
+    </div>
+  </section>
+</main>
+
+<div class="drop-overlay no-print" id="drop-overlay"><div>Drop your Markdown file</div></div>
+<div class="toast no-print" id="toast" role="status" aria-live="polite"></div>
+
+<script type="text/markdown" id="sample-md">
+# Quarterly Notes · 季度笔记
+
+A short demo of everything this converter can render. Edit the left side and watch the paper on the right update. :sparkles:
+
+## Text
+
+**Bold**, *italic*, ~~strikethrough~~, `inline code`, and a [link](https://example.com).
+
+> Blockquotes get a coloured rule on the left — handy for callouts.
+
+- [x] GitHub-style task lists
+- [x] Tables, code, math and diagrams
+- [ ] Your own content
+
+## 中文排版
+
+中文、日本語、한국어 都能正常显示。这里是一段较长的中文文字，用来检查换行与字体：人工智能模型的价格每天都在变化，所以我们需要一张清晰的价格表。
+
+## Table
+
+| Model | Input $/1M | Output $/1M | Context |
+|:------|-----------:|------------:|:-------:|
+| Alpha | 0.50 | 1.50 | 128k |
+| Beta  | 3.00 | 15.00 | 200k |
+| 伽马   | 0.14 | 0.28 | 64k |
+
+## Code
+
+```python
+def fib(n: int) -> int:
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+
+print([fib(i) for i in range(10)])  # 斐波那契
+```
+
+```js
+const total = items.reduce((sum, x) => sum + x.price, 0);
+console.log(`Total: ${total.toFixed(2)}`);
+```
+
+## Math
+
+Inline: $E = mc^2$ and $a^2 + b^2 = c^2$.
+
+$$
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+$$
+
+$$
+\int_a^b f'(x)\,dx = f(b) - f(a)
+$$
+
+## Diagram
+
+```mermaid
+flowchart LR
+  A[Write Markdown] --> B{Looks good?}
+  B -- yes --> C[Export PDF]
+  B -- no --> A
+```
+
+\newpage
+
+## Page breaks
+
+This section starts on a new page. Put `\newpage` (or `<div class="page-break"></div>`) on its own line to force a break. A `---` line is just a horizontal rule.
+
+---
+
+Emoji shortcodes: :rocket: :white_check_mark: :warning: :tada:
+</script>
+
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/marked-highlight.umd.js"></script>
+<script src="vendor/hljs/highlight.min.js"></script>
+<script src="vendor/katex/katex.min.js"></script>
+<script src="vendor/purify.min.js"></script>
+<script src="vendor/mermaid.min.js"></script>
+<script src="vendor/html2pdf.bundle.min.js" defer></script>
+<script src="app.js"></script>
+</body>
+</html>
