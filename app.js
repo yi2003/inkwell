@@ -86,7 +86,7 @@
           .replace(/(?<!\\)\\\[([\s\S]+?)\\\]/g, (_, t, o, w) => put(unquote(t, w, o), true))
           .replace(/(?<!\\)\$\$([\s\S]+?)\$\$/g, (_, t, o, w) => put(unquote(t, w, o), true))
           .replace(/(?<!\\)\\\(([\s\S]+?)\\\)/g, (_, t) => put(t, false))
-          .replace(/(?<![\\$\w])\$(?![\s$\d])((?:\\.|[^\\$\n])+?)(?<!\s)\$(?![\d$])/g, (_, t) => put(t, false));
+          .replace(/(?<![\\$\w])\$(?![\s$])((?:\\.|[^\\$\n])+?)(?<!\s)\$(?![\d$])/g, (_, t) => put(t, false));
       }
       // Bare image URL alone on a line (optionally inside "> " quotes) → linked image.
       text = text.replace(/^((?:[ \t]*>)*[ \t]*)(https?:\/\/[^\s<>()]+?)([ \t]*)$/gm, (m, pre, url, tail) =>
@@ -132,7 +132,7 @@
         try { return l ? hljs.highlight(code, { language: l }).value : hljs.highlightAuto(code).value; } catch { return esc(code); }
       },
     }),
-    { gfm: true, breaks: false, extensions: [emoji, pageBreak] },
+    { gfm: true, breaks: true, extensions: [emoji, pageBreak] },
   );
 
   // Keep the author's own numbers: marked merges "7." "15." "21." separated by blank lines into
